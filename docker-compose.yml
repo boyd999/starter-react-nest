@@ -1,0 +1,59 @@
+name: acme
+
+# Shared by all three services. Without the anchor these five volume lines
+# would be repeated verbatim three times.
+x-dev: &dev
+  build: .
+  # Explicit tag so all three services share one image instead of compose
+  # tagging acme-api / acme-web / acme-install separately.
+  image: acme-dev
+  working_dir: /app
+  volumes:
+    - .:/app
+    # These named volumes shadow the host's node_modules at every level, which
+    # is what keeps macOS-ARM binaries (esbuild, rollup) out of the Linux
+    # containers. Every workspace needs one — a missing path lets the host's
+    # copy through.
+    - node_modules:/app/node_modules
+    - api_node_modules:/app/apps/api/node_modules
+    - web_node_modules:/app/apps/web/node_modules
+    - shared_node_modules:/app/packages/shared/node_modules
+
+services:
+  # One-shot. Owns the dependency volumes; runs to completion before the apps
+  # start, so nothing ever reads a half-populated node_modules.
+  install:
+    <<: *dev
+    # Plain `yarn install`, deliberately NOT --immutable: this service exists to
+    # be able to update the lockfile, which is what a build-time install can't do.
+    # @acme/api imports buildHealthStatus as a value, so shared must be built too.
+    command: sh -c "yarn install && yarn workspace @acme/shared build"
+
+  api:
+    <<: *dev
+    command: yarn workspace @acme/api dev
+    environment:
+      PORT: 3001
+    ports:
+      - "${PORT_API:-3001}:3001"
+    depends_on:
+      install:
+        condition: service_completed_successfully
+
+  web:
+    <<: *dev
+    command: yarn workspace @acme/web dev
+    environment:
+      PORT: 3000
+      VITE_API_PROXY_TARGET: http://api:3001
+    ports:
+      - "${PORT_WEB:-3000}:3000"
+    depends_on:
+      install:
+        condition: service_completed_successfully
+
+volumes:
+  node_modules:
+  api_node_modules:
+  web_node_modules:
+  shared_node_modules:

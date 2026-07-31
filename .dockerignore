@@ -1,0 +1,11 @@
+# The Dockerfile only copies package.json, so this exists purely to keep the
+# build context small.
+node_modules
+**/node_modules
+dist
+**/dist
+.turbo
+**/.turbo
+.git
+.yarn/cache
+.yarn/install-state.gz
