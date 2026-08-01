@@ -12,5 +12,16 @@
         ]
       }
     ]
+  },
+  "extraKnownMarketplaces": {
+    "smartshore-tools": {
+      "source": {
+        "source": "github",
+        "repo": "boyd999/claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "smartshore@smartshore-tools": true
   }
 }

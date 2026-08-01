@@ -26,6 +26,19 @@ Claude Code users get formatting for free — a `PostToolUse` hook in `.claude/s
 Prettier and `eslint --fix` on each file as it's written. It is deliberately silent and never blocks,
 so it cannot substitute for `yarn lint`: anything `--fix` can't repair is only reported there.
 
+## Commit and PR conventions
+
+`.claude/settings.json` declares the `smartshore-tools` marketplace
+([boyd999/claude-plugins](https://github.com/boyd999/claude-plugins)) and enables its `smartshore`
+plugin, so Claude Code offers to install it the first time you trust this folder. It provides:
+
+- `/smartshore:commit-message` — one Conventional Commits line from the staged diff. It suggests
+  only; it never runs `git commit`.
+- `/smartshore:pr-description` — a PR description in Title / Description / Notes format.
+
+Both are advisory, like everything else in this file. The plugin is shared across every project, so
+fix a convention there rather than restating it here — a copy in this repo is a copy that drifts.
+
 ## Architecture
 
 Three workspaces, Yarn 4 + Turborepo:

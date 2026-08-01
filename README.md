@@ -214,6 +214,24 @@ doesn't error on every edit.
 Other AI tools (Codex, Cursor, Copilot, Gemini CLI, Aider) read `AGENTS.md`, which instructs them to
 run `yarn lint:fix && yarn format` before finishing.
 
+### Commit and PR skills
+
+`.claude/settings.json` also declares the `smartshore-tools` plugin marketplace
+([boyd999/claude-plugins](https://github.com/boyd999/claude-plugins)), so Claude Code offers to
+install the shared `smartshore` plugin when you trust the folder. Two skills come with it:
+
+```
+/smartshore:commit-message    one Conventional Commits line from the staged diff
+/smartshore:pr-description    a PR description from the current branch
+```
+
+Decline the install and nothing breaks — Claude Code notes the plugin isn't installed and carries on.
+
+These live in a separate repo rather than in this template on purpose. Every project gets the same
+conventions, and improving them is one push instead of an edit in every project ever scaffolded.
+Updates aren't automatic for third-party marketplaces: run `/plugin marketplace update
+smartshore-tools`, or enable auto-update once under `/plugin` → Marketplaces.
+
 ### What's intentionally missing
 
 No database, no `.editorconfig`, husky, lint-staged, CI workflows, test framework, auth, or
