@@ -16,7 +16,7 @@ makes it yours. This repo is meant to be consumed by a scaffolder
 
 | Tool | Version | Notes |
 |---|---|---|
-| Node | 22 | `.nvmrc` is present — `nvm use` |
+| Node | **22.13+** | `.nvmrc` says `22`; ESLint 10 needs at least 22.13 |
 | Corepack | bundled with Node | `corepack enable` (activates Yarn 4) |
 | Yarn | 4.18.0 | pinned via `packageManager`, no global install needed |
 | Docker | optional | with Compose v2, if you'd rather not install Node at all |
@@ -81,6 +81,8 @@ the API itself has no global prefix.
 | `yarn dev` | All workspaces in watch mode via Turborepo |
 | `yarn build` | Builds `@acme/shared` first, then both apps |
 | `yarn typecheck` | Type-checks every workspace, no emit |
+| `yarn lint` / `yarn lint:fix` | ESLint across all three workspaces (fails on warnings) |
+| `yarn format` / `yarn format:check` | Prettier over the repo |
 | `yarn docker:up` / `:down` / `:logs` | Compose wrappers |
 | `yarn docker:reset` | `docker compose down -v` — drops the dependency volumes |
 
@@ -180,9 +182,42 @@ Deliberate, and enforced via `resolutions`. TypeScript 7 is the Go-native port a
 `baseUrl` and `emitDecoratorMetadata`; NestJS's dependency injection requires the latter, so
 the API cannot compile under it. Revisit when NestJS supports TS 7.
 
+### Linting and formatting
+
+ESLint 10 (flat config in `eslint.config.mjs`) and Prettier, both at the root — one config covering
+all three workspaces rather than three copies.
+
+```bash
+yarn lint         # ESLint, fails on warnings
+yarn lint:fix     # ...applying every auto-fix
+yarn format       # Prettier
+```
+
+Prettier owns formatting, ESLint owns correctness. `.prettierrc` is deliberately three settings:
+`semi: false`, `singleQuote: true`, `printWidth: 100`. Markdown and `docker-compose.yml` are in
+`.prettierignore` — the prose is hand-wrapped and Prettier only adds diff noise to it.
+
+`apps/web/src` additionally gets `eslint-plugin-react-hooks` and `eslint-plugin-react-refresh`, which
+catch conditional hook calls and dependency-array mistakes that `tsc` accepts happily.
+
+### Formatting happens automatically in Claude Code
+
+`.claude/settings.json` registers a `PostToolUse` hook that runs Prettier and `eslint --fix` on each
+file as it's written, so agent-generated code lands formatted without anyone asking. Claude Code
+prompts you to approve the hook the first time you open the project — that's expected, and the script
+it runs is `.claude/hooks/format.mjs`, ~50 lines with no dependencies.
+
+The hook is silent and never blocks. It cannot substitute for `yarn lint`: anything `--fix` can't
+repair is only reported there. It also exits quietly when `node_modules` is missing, so a fresh clone
+doesn't error on every edit.
+
+Other AI tools (Codex, Cursor, Copilot, Gemini CLI, Aider) read `AGENTS.md`, which instructs them to
+run `yarn lint:fix && yarn format` before finishing.
+
 ### What's intentionally missing
 
-No database, no ESLint, Prettier, editorconfig, husky, CI workflows, test framework, auth, or
-production Dockerfiles. This is the barebones structural template; those get layered on per
-project. `tsconfig.base.json` is deliberately minimal for the same reason — it holds only
-settings that don't conflict between Nest's and Vite's very different compiler setups.
+No database, no `.editorconfig`, husky, lint-staged, CI workflows, test framework, auth, or
+production Dockerfiles. Note that without CI nothing actually *blocks* unformatted or lint-failing
+code — the hook and `AGENTS.md` are both advisory. This is the barebones structural template; those
+get layered on per project. `tsconfig.base.json` is deliberately minimal for the same reason — it
+holds only settings that don't conflict between Nest's and Vite's very different compiler setups.

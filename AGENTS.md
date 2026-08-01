@@ -13,10 +13,18 @@ Windsurf and Zed. `CLAUDE.md` imports it for Claude Code.
 | `yarn dev` | All workspaces in watch mode (Turborepo). Web :3000, API :3001. |
 | `yarn build` | Builds `@acme/shared` first, then both apps. |
 | `yarn typecheck` | Type-checks every workspace, no emit. |
+| `yarn lint` | ESLint across all three workspaces. Fails on warnings. |
+| `yarn lint:fix` | Same, applying every auto-fix ESLint can. |
+| `yarn format` | Prettier over the repo. |
+| `yarn format:check` | Prettier in check mode — reports, changes nothing. |
 | `docker compose up` | Runs everything in containers. No host Node needed. |
 
-Always run `yarn build` **and** `yarn typecheck` after changes. There is no test suite (see
-*Intentionally absent*), so those two are the only automated safety net.
+**Before you finish, run `yarn lint:fix && yarn format`, then `yarn build` and `yarn typecheck`.**
+There is no test suite (see *Intentionally absent*), so those are the only automated safety net.
+
+Claude Code users get formatting for free — a `PostToolUse` hook in `.claude/settings.json` runs
+Prettier and `eslint --fix` on each file as it's written. It is deliberately silent and never blocks,
+so it cannot substitute for `yarn lint`: anything `--fix` can't repair is only reported there.
 
 ## Architecture
 
@@ -54,9 +62,42 @@ Workspace-to-workspace dependencies use `"@acme/shared": "workspace:*"`.
 **Types crossing the api/web boundary go in `packages/shared`.** Do not duplicate a response
 interface in `apps/api` and again in `apps/web` — that is the mistake this package exists to prevent.
 
+## Code style
+
+**Prettier owns formatting, ESLint owns correctness.** Don't blur the line: no stylistic ESLint rules,
+no formatting arguments in code review.
+
+`.prettierrc` is three settings — `semi: false`, `singleQuote: true`, `printWidth: 100`. The
+no-semicolons choice matched `apps/web`; `apps/api` and `packages/shared` were reformatted to suit.
+
+Two things in the config are load-bearing:
+
+- **`eslint-config-prettier` must stay last** in `eslint.config.mjs`. Its whole job is switching off
+  rules that would fight Prettier, and a config appended after it re-enables them.
+- **`eslint-plugin-react-refresh` 0.5.x exports differ from every example you'll find online.** It's a
+  *named* export and the configs are *functions*: `import { reactRefresh } from …` then
+  `reactRefresh.configs.vite()`. The default-export/plain-object form is from 0.4.x and throws.
+
+Rules are the non-type-checked recommended sets — `js.configs.recommended`,
+`tseslint.configs.recommended`, plus react-hooks and react-refresh for `apps/web/src`. Type-aware
+rules (`recommendedTypeChecked`) are not enabled: `yarn typecheck` already covers types, and wiring
+`projectService` across three unrelated tsconfigs costs more than it catches at this size.
+
+**Lint is a root script, not a turbo task.** One flat config covers all three workspaces, so there's
+nothing to orchestrate and ESLint finishes in about a second. If the repo grows enough that it
+doesn't, give each workspace its own `lint` script and add a turbo task — that's the upgrade path.
+
 ## Gotchas
 
 Each of these has a reason. Changing them without understanding the reason will break something.
+
+**Node must be ≥ 22.13.** ESLint 10 declares `^20.19.0 || ^22.13.0 || >=24`. `.nvmrc` says `22`, which
+nvm resolves to your newest installed 22.x — if that's older than 22.13, `yarn lint` won't run.
+
+**Markdown and `docker-compose.yml` are in `.prettierignore`.** The prose is hand-wrapped at 100
+columns and reviewed by humans; Prettier only pads tables and rewrites `*emphasis*` as `_emphasis_`,
+which is diff noise in exactly the files people read. Compose is deliberately double-quoted and
+`singleQuote` would rewrite every port mapping for nothing.
 
 **TypeScript is pinned to 5.9.3** via `resolutions`, and must stay there. TypeScript 7 is the
 Go-native port; it drops `baseUrl` and `emitDecoratorMetadata`. NestJS dependency injection requires
@@ -114,9 +155,12 @@ resolution changes — but `yarn install --immutable` fails until a plain `yarn 
 Do **not** add these unless explicitly asked. Their absence is a decision, not an oversight:
 
 - **No database.** The API holds no persistence layer at all. Add one when the project needs it.
-- **No ESLint, Prettier, or editorconfig.** Removed on purpose; formatting is not enforced here.
+- **No `.editorconfig`.** Prettier is the single source of formatting truth; a second one drifts.
+- **No husky or lint-staged.** No git hooks, no `prepare` script.
+- **No type-checked ESLint rules.** See *Code style* for why.
 - **No test framework.** Jest was removed. Do not add Jest, Vitest, or test files unprompted.
-- **No CI workflows.**
+- **No CI workflows.** Nothing currently *blocks* unformatted or lint-failing code — the hook and
+  this file are both advisory. Worth revisiting per project.
 - **No production Dockerfile.** The single `Dockerfile` is a bare dev runtime.
 - **No auth, no UI component library, no state management.**
 

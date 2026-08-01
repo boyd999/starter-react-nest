@@ -3,9 +3,9 @@
  * app that consumes it. Replace with real domain types per project.
  */
 export interface HealthStatus {
-  status: 'ok';
-  service: string;
-  timestamp: string;
+  status: 'ok'
+  service: string
+  timestamp: string
 }
 
 /**
@@ -17,5 +17,5 @@ export function buildHealthStatus(service = 'acme-api'): HealthStatus {
     status: 'ok',
     service,
     timestamp: new Date().toISOString(),
-  };
+  }
 }

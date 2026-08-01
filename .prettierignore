@@ -1,0 +1,14 @@
+node_modules
+dist
+.turbo
+.yarn
+yarn.lock
+
+# Prose is hand-wrapped at 100 columns and reviewed by humans. Prettier only
+# pads tables and swaps *emphasis* for _emphasis_ — pure diff noise in the
+# files people actually read.
+*.md
+
+# Deliberately double-quoted; singleQuote would rewrite every port mapping for
+# no benefit.
+docker-compose.yml

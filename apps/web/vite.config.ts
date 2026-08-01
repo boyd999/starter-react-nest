@@ -1,10 +1,10 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // On the host the API is on localhost; inside compose it's the `api` service.
 // docker-compose.yml sets VITE_API_PROXY_TARGET=http://api:3001.
-const apiTarget = process.env.VITE_API_PROXY_TARGET ?? "http://localhost:3001";
+const apiTarget = process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:3001'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -15,11 +15,11 @@ export default defineConfig({
     proxy: {
       // The API has no global prefix (GET /health, not /api/health), so strip
       // /api on the way through.
-      "/api": {
+      '/api': {
         target: apiTarget,
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
+        rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
   },
-});
+})

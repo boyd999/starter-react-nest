@@ -28,6 +28,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# The Claude Code skills, settings and format hook are part of the template and
+# must ship with it. A personal ~/.gitignore_global containing `.claude/` would
+# otherwise exclude them silently — repo .gitignore takes precedence over the
+# global one. Personal permission state stays local.
+!.claude/
+.claude/settings.local.json
+
 # Editors / OS
 .DS_Store
 .idea/
