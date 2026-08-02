@@ -29,9 +29,10 @@ manners:
 - **`PostToolUse` → `.claude/hooks/format.mjs`** runs Prettier and `eslint --fix` on each file as
   it's written. Silent, never blocks. It cannot substitute for `yarn lint` — anything `--fix` can't
   repair is only reported there.
-- **`Stop` → `.claude/hooks/test.mjs`** runs the suite when the agent finishes a turn. This one
-  **blocks**: on failure it exits 2, which keeps the conversation open and hands the failing output
-  back so the agent fixes what it broke instead of returning green-looking work.
+- **`Stop` → `.claude/hooks/test.mjs`** runs the suite when the agent finishes a turn *that changed
+  a source file* — `format.mjs` leaves a marker, and without one this hook exits immediately. This
+  one **blocks**: on failure it exits 2, which keeps the conversation open and hands the failing
+  output back so the agent fixes what it broke instead of returning green-looking work.
 
 ## Commit and PR conventions
 
@@ -149,11 +150,22 @@ computed value breaks the rename silently.
 
 ### The Stop hook
 
-`.claude/hooks/test.mjs` runs `turbo run test` when the agent finishes a turn, and exits 2 with the
-output on stderr if anything fails. Two lines in it are not optional:
+`.claude/hooks/test.mjs` runs `turbo run test` when the agent finishes a turn **on which a source
+file was edited**, and exits 2 with the output on stderr if anything fails. Three lines in it are not
+optional:
 
+- **It exits 0 unless `node_modules/.cache/claude-tests-pending` exists.** `format.mjs` writes that
+  marker on every in-project `Edit`/`Write`; `test.mjs` clears it and runs. Without the gate the
+  suite fires on *every* turn — asking a question or invoking a read-only skill like
+  `/smartshore:commit-message` would sit through a full test run. Gated, an unchanged turn costs
+  ~20ms instead of ~1.6s.
+  The marker is cleared **before** the run, not after: if the agent edits again while fixing a
+  failure, `format.mjs` re-arms it and the next turn re-runs.
 - **It exits 0 immediately when the payload's `stop_hook_active` is true.** Exiting 2 tells Claude
-  Code *not* to stop, so without that guard a test the agent can't fix loops forever.
+  Code *not* to stop, so without that guard a test the agent can't fix loops forever. The
+  consequence is that the hook verifies **once per user turn** — when the agent fixes a failure
+  within the same turn, the fix isn't re-checked by the hook, and `yarn test` stays the thing that
+  actually confirms.
 - **It prepends the root `node_modules/.bin` to `PATH`.** turbo shells out to `yarn run test` per
   workspace using whatever `yarn` is on `PATH`; on a machine with nvm that's Yarn 1, not the
   corepack-pinned Yarn 4, and Yarn 1 only adds the *workspace's* `.bin`. `vitest` is hoisted to the

@@ -243,9 +243,11 @@ Five unit tests ship with the template — pure functions in `@acme/shared`, the
 and the `App` component under jsdom. They're deliberately few: enough to demonstrate the pattern and
 to catch an agent breaking something, not a coverage exercise.
 
-A second hook, `Stop` → `.claude/hooks/test.mjs`, runs the suite whenever Claude Code finishes a
-turn. Unlike the format hook it **blocks**: if anything fails it exits 2, which keeps the
-conversation open and hands the failures back so the agent fixes them before returning to you.
+A second hook, `Stop` → `.claude/hooks/test.mjs`, runs the suite when Claude Code finishes a turn —
+but only one that actually edited a source file, so asking a question or running a read-only skill
+doesn't sit through a test run. Unlike the format hook it **blocks**: if anything fails it exits 2,
+which keeps the conversation open and hands the failures back so the agent fixes them before
+returning to you.
 
 Two details worth knowing if you extend it. API tests use `new AppController()` rather than Nest's
 `Test.createTestingModule()` — Vitest's esbuild transform drops `emitDecoratorMetadata`, which the

@@ -9,9 +9,13 @@
 // Node rather than bash+jq: jq isn't guaranteed on a fresh clone, node is.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { delimiter, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+// Written by format.mjs whenever an in-project source file is edited. Its
+// presence is the only reason to run anything here.
+const MARKER = 'node_modules/.cache/claude-tests-pending'
 
 const projectDir = resolve(
   process.env.CLAUDE_PROJECT_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
@@ -34,6 +38,17 @@ if (payload().stop_hook_active) process.exit(0)
 // turn would be far more disruptive than skipping the run.
 const turbo = resolve(projectDir, 'node_modules/.bin/turbo')
 if (!existsSync(turbo)) process.exit(0)
+
+// Nothing was edited this turn, so there is nothing to re-verify. Without this
+// the suite fires on every turn — including ones that only asked a question or
+// invoked a read-only skill like /smartshore:commit-message.
+const marker = resolve(projectDir, MARKER)
+if (!existsSync(marker)) process.exit(0)
+
+// Cleared *before* the run, not after. If the agent edits again while fixing a
+// failure, format.mjs re-arms the marker and the next turn re-runs; clearing
+// afterwards would wipe that fresh signal.
+rmSync(marker, { force: true })
 
 // turbo caches per workspace, so untouched packages return instantly, and the
 // `test` task's dependsOn: ["^build"] means @acme/shared is built first —

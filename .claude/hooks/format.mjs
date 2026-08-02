@@ -13,11 +13,17 @@
 // file. `yarn lint` remains the thing that actually reports problems.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const EXTENSIONS = /\.(m?[jt]sx?|cjs|cts|json|jsonc|css|html)$/
+
+// Read and cleared by the Stop hook (test.mjs). This hook is the only thing
+// that knows a source file actually changed, so it's what arms the test run —
+// otherwise the suite fires on every turn, including ones that only asked a
+// question or invoked a read-only skill.
+const MARKER = 'node_modules/.cache/claude-tests-pending'
 
 const projectDir = resolve(
   process.env.CLAUDE_PROJECT_DIR ?? resolve(dirname(fileURLToPath(import.meta.url)), '../..'),
@@ -46,6 +52,17 @@ if (!file || !EXTENSIONS.test(file)) process.exit(0)
 const abs = resolve(file)
 if (!abs.startsWith(projectDir)) process.exit(0)
 if (!existsSync(abs) || !statSync(abs).isFile()) process.exit(0)
+
+// Swallowing everything is deliberate: this hook's contract is that it is
+// silent and never fails, and a marker it couldn't write must not change that.
+// The cost of failing here is a skipped test run, not a broken edit.
+try {
+  const marker = resolve(projectDir, MARKER)
+  mkdirSync(dirname(marker), { recursive: true })
+  writeFileSync(marker, '')
+} catch {
+  // ignored
+}
 
 tryRun('prettier', ['--write', '--ignore-unknown', abs])
 tryRun('eslint', ['--fix', '--no-warn-ignored', abs])
