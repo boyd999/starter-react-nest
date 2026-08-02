@@ -12,19 +12,26 @@ Windsurf and Zed. `CLAUDE.md` imports it for Claude Code.
 | `yarn install` | Install. Required once on the host for editor autocomplete. |
 | `yarn dev` | All workspaces in watch mode (Turborepo). Web :3000, API :3001. |
 | `yarn build` | Builds `@acme/shared` first, then both apps. |
-| `yarn typecheck` | Type-checks every workspace, no emit. |
+| `yarn typecheck` | Type-checks every workspace, no emit. Covers test files too. |
+| `yarn test` | Vitest across all three workspaces (Turborepo). |
 | `yarn lint` | ESLint across all three workspaces. Fails on warnings. |
 | `yarn lint:fix` | Same, applying every auto-fix ESLint can. |
 | `yarn format` | Prettier over the repo. |
 | `yarn format:check` | Prettier in check mode — reports, changes nothing. |
 | `docker compose up` | Runs everything in containers. No host Node needed. |
 
-**Before you finish, run `yarn lint:fix && yarn format`, then `yarn build` and `yarn typecheck`.**
-There is no test suite (see *Intentionally absent*), so those are the only automated safety net.
+**Before you finish, run `yarn lint:fix && yarn format`, then `yarn build`, `yarn typecheck` and
+`yarn test`.** There is no CI (see *Intentionally absent*), so those are the whole safety net.
 
-Claude Code users get formatting for free — a `PostToolUse` hook in `.claude/settings.json` runs
-Prettier and `eslint --fix` on each file as it's written. It is deliberately silent and never blocks,
-so it cannot substitute for `yarn lint`: anything `--fix` can't repair is only reported there.
+Two Claude Code hooks are wired up in `.claude/settings.json`, and they have deliberately opposite
+manners:
+
+- **`PostToolUse` → `.claude/hooks/format.mjs`** runs Prettier and `eslint --fix` on each file as
+  it's written. Silent, never blocks. It cannot substitute for `yarn lint` — anything `--fix` can't
+  repair is only reported there.
+- **`Stop` → `.claude/hooks/test.mjs`** runs the suite when the agent finishes a turn. This one
+  **blocks**: on failure it exits 2, which keeps the conversation open and hands the failing output
+  back so the agent fixes what it broke instead of returning green-looking work.
 
 ## Commit and PR conventions
 
@@ -100,6 +107,62 @@ rules (`recommendedTypeChecked`) are not enabled: `yarn typecheck` already cover
 nothing to orchestrate and ESLint finishes in about a second. If the repo grows enough that it
 doesn't, give each workspace its own `lint` script and add a turbo task — that's the upgrade path.
 
+## Testing
+
+Vitest, one `test` script per workspace, orchestrated by turbo. Tests live beside the code they
+cover as `*.test.ts` / `*.test.tsx`.
+
+```
+packages/shared/src/health.test.ts       pure functions
+apps/api/src/app.controller.test.ts      controller, instantiated directly
+apps/web/src/App.test.tsx                component, jsdom + Testing Library
+```
+
+**`test` is a turbo task with `dependsOn: ["^build"]`**, unlike lint. `@acme/api` imports
+`buildHealthStatus` from `@acme/shared` as a *value*, resolved through shared's compiled `dist/`, so
+tests need shared built first — the same reason `typecheck` has it. Running
+`yarn workspace @acme/api test` on a clean checkout fails with `Cannot find module '@acme/shared'`;
+that's the missing build, not a broken test.
+
+Four things here are load-bearing:
+
+- **API tests instantiate controllers directly** — `new AppController()`, never
+  `Test.createTestingModule()`. Vitest transforms with esbuild, which **drops
+  `emitDecoratorMetadata`**, and Nest's DI container needs it to resolve constructor parameters. The
+  controller takes no arguments, so direct instantiation sidesteps the problem entirely. The moment
+  you need DI in a test, the fix is `unplugin-swc` + `@swc/core` with `legacyDecorator` and
+  `decoratorMetadata` enabled — the official NestJS recipe — not switching TypeScript versions.
+- **`packages/shared` and `apps/api` build from `tsconfig.build.json`, which excludes `**/*.test.ts`;
+  `tsconfig.json` still includes them.** That split is why `yarn typecheck` type-checks tests (Vitest
+  does not) while `dist/` stays free of them. Without the exclude the compiled tests ship via
+  shared's `files: ["dist"]` and Vitest runs both the source and the compiled copy.
+- **`apps/web` has its own `vitest.config.ts`** rather than a `test` block in `vite.config.ts`.
+  Vitest prefers it when both exist, which keeps `vite.config.ts` about the dev server and the
+  `/api` proxy.
+- **`@testing-library/dom` is a direct devDependency.** It's a *peer* of
+  `@testing-library/react` v16, not a transitive dep, and without it jest-dom's Vitest entrypoint
+  dies with `Cannot find package '@testing-library/dom'`.
+
+**Keep `acme` literal in test assertions.** `packages/shared/src/health.test.ts` asserts on
+`'acme-api'`; that token is what `create-scaffold` rewrites to the project name. Replacing it with a
+computed value breaks the rename silently.
+
+### The Stop hook
+
+`.claude/hooks/test.mjs` runs `turbo run test` when the agent finishes a turn, and exits 2 with the
+output on stderr if anything fails. Two lines in it are not optional:
+
+- **It exits 0 immediately when the payload's `stop_hook_active` is true.** Exiting 2 tells Claude
+  Code *not* to stop, so without that guard a test the agent can't fix loops forever.
+- **It prepends the root `node_modules/.bin` to `PATH`.** turbo shells out to `yarn run test` per
+  workspace using whatever `yarn` is on `PATH`; on a machine with nvm that's Yarn 1, not the
+  corepack-pinned Yarn 4, and Yarn 1 only adds the *workspace's* `.bin`. `vitest` is hoisted to the
+  root, so without this the hook dies with `command not found: vitest` while `yarn test` in a
+  terminal works fine.
+
+Like `format.mjs`, it exits 0 when `node_modules` is missing so a fresh clone doesn't error on every
+turn.
+
 ## Gotchas
 
 Each of these has a reason. Changing them without understanding the reason will break something.
@@ -171,7 +234,10 @@ Do **not** add these unless explicitly asked. Their absence is a decision, not a
 - **No `.editorconfig`.** Prettier is the single source of formatting truth; a second one drifts.
 - **No husky or lint-staged.** No git hooks, no `prepare` script.
 - **No type-checked ESLint rules.** See *Code style* for why.
-- **No test framework.** Jest was removed. Do not add Jest, Vitest, or test files unprompted.
+- **No E2E tests.** Vitest unit tests only (see *Testing*). Do not add Playwright, Cypress, or
+  `supertest` HTTP-level suites unprompted.
+- **No coverage thresholds.** Coverage isn't collected or enforced. The tests exist to catch
+  regressions during agent edits, not to hit a number.
 - **No CI workflows.** Nothing currently *blocks* unformatted or lint-failing code — the hook and
   this file are both advisory. Worth revisiting per project.
 - **No production Dockerfile.** The single `Dockerfile` is a bare dev runtime.

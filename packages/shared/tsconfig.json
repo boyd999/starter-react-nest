@@ -8,5 +8,7 @@
     "outDir": "./dist",
     "rootDir": "./src"
   },
+  // Covers tests too, so `yarn typecheck` type-checks them — Vitest doesn't.
+  // The build uses tsconfig.build.json, which leaves them out of dist/.
   "include": ["src"]
 }

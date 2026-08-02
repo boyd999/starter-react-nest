@@ -1,0 +1,8 @@
+{
+  // Emit config, mirroring apps/api's split. Tests live beside the code they
+  // cover, so without this exclude they compile into dist/, ship via
+  // `files: ["dist"]`, and Vitest runs both src/ and the compiled copy.
+  // tsconfig.json keeps them in scope so `yarn typecheck` still checks them.
+  "extends": "./tsconfig.json",
+  "exclude": ["**/*.test.ts"]
+}

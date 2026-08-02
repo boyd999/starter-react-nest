@@ -80,7 +80,8 @@ the API itself has no global prefix.
 |---|---|
 | `yarn dev` | All workspaces in watch mode via Turborepo |
 | `yarn build` | Builds `@acme/shared` first, then both apps |
-| `yarn typecheck` | Type-checks every workspace, no emit |
+| `yarn typecheck` | Type-checks every workspace, no emit — test files included |
+| `yarn test` | Vitest across all three workspaces |
 | `yarn lint` / `yarn lint:fix` | ESLint across all three workspaces (fails on warnings) |
 | `yarn format` / `yarn format:check` | Prettier over the repo |
 | `yarn docker:up` / `:down` / `:logs` | Compose wrappers |
@@ -232,10 +233,31 @@ conventions, and improving them is one push instead of an edit in every project 
 Updates aren't automatic for third-party marketplaces: run `/plugin marketplace update
 smartshore-tools`, or enable auto-update once under `/plugin` → Marketplaces.
 
+### Tests run themselves after an agent edits
+
+```bash
+yarn test        # Vitest across all three workspaces
+```
+
+Five unit tests ship with the template — pure functions in `@acme/shared`, the `/health` controller,
+and the `App` component under jsdom. They're deliberately few: enough to demonstrate the pattern and
+to catch an agent breaking something, not a coverage exercise.
+
+A second hook, `Stop` → `.claude/hooks/test.mjs`, runs the suite whenever Claude Code finishes a
+turn. Unlike the format hook it **blocks**: if anything fails it exits 2, which keeps the
+conversation open and hands the failures back so the agent fixes them before returning to you.
+
+Two details worth knowing if you extend it. API tests use `new AppController()` rather than Nest's
+`Test.createTestingModule()` — Vitest's esbuild transform drops `emitDecoratorMetadata`, which the
+DI container needs; using DI in a test means adding `unplugin-swc`. And `test` is a turbo task with
+`dependsOn: ["^build"]`, because `@acme/api` imports `@acme/shared` as a compiled value, so running
+one workspace's tests in isolation on a clean checkout will fail until shared is built.
+
 ### What's intentionally missing
 
-No database, no `.editorconfig`, husky, lint-staged, CI workflows, test framework, auth, or
-production Dockerfiles. Note that without CI nothing actually *blocks* unformatted or lint-failing
-code — the hook and `AGENTS.md` are both advisory. This is the barebones structural template; those
-get layered on per project. `tsconfig.base.json` is deliberately minimal for the same reason — it
-holds only settings that don't conflict between Nest's and Vite's very different compiler setups.
+No database, no `.editorconfig`, husky, lint-staged, CI workflows, E2E tests, coverage thresholds,
+auth, or production Dockerfiles. Note that without CI nothing actually *blocks* unformatted or
+lint-failing code on push — the hooks and `AGENTS.md` only reach people running Claude Code locally.
+This is the barebones structural template; the rest gets layered on per project.
+`tsconfig.base.json` is deliberately minimal for the same reason — it holds only settings that don't
+conflict between Nest's and Vite's very different compiler setups.
